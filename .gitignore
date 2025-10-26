@@ -69,3 +69,6 @@ sessions/
 
 # Local development
 .local/
+
+# Analysis files (internal documentation)
+SESSION_RECORDER_ANALYSIS.md
