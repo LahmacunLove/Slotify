@@ -1,0 +1,82 @@
+[package]
+name = "session-recorder-addon"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+description = "DJ Session Recorder & Lottery System"
+license = "MIT"
+repository = "https://github.com/your-username/session-recorder-addon"
+
+[dependencies]
+# Web framework and async runtime
+axum = "0.7"
+tokio = { version = "1.0", features = ["full"] }
+tower = "0.4"
+tower-http = { version = "0.5", features = ["cors", "fs"] }
+
+# Database
+sqlx = { version = "0.7", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Time handling
+chrono = { version = "0.4", features = ["serde"] }
+
+# UUID generation
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Random number generation
+rand = "0.8"
+
+# Configuration
+config = "0.14"
+dotenv = "0.15"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# GUI Framework (egui for native cross-platform GUI)
+eframe = "0.29"
+egui = "0.29"
+egui_extras = "0.29"
+
+# HTTP client for external services
+reqwest = { version = "0.12", features = ["json"] }
+
+# MinIO/S3 client
+aws-sdk-s3 = "1.0"
+aws-config = "1.0"
+aws-credential-types = "1.0"
+
+# Email sending
+lettre = "0.11"
+
+# File handling
+tempfile = "3.0"
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+[dev-dependencies]
+# Testing
+tokio-test = "0.4"
+tempfile = "3.0"
+regex = "1.0"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[[bin]]
+name = "server"
+path = "src/main.rs"
+
+[[bin]]
+name = "gui"
+path = "src/gui/main.rs"

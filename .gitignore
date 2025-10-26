@@ -1,0 +1,71 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Environment & Config
+.env
+.env.local
+.env.*.local
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+
+# Logs
+*.log
+logs/
+
+# Runtime
+*.pid
+*.seed
+*.pid.lock
+
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+build/
+
+# Audio files (recordings)
+recordings/
+*.wav
+*.mp3
+*.ogg
+*.flac
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Session recordings and uploads
+uploads/
+sessions/
+
+# Docker
+.dockerignore
+
+# Local development
+.local/
