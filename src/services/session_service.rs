@@ -2,7 +2,7 @@ use crate::models::{
     session::{Session, SessionResponse, StartSessionRequest, SessionStats, SessionType, SessionUploadStatus, B2BSessionRequest},
     AppState,
 };
-use crate::services::{SessionRecorderService, SessionRecorderConfig};
+use crate::services::{SessionRecorderService, SessionRecorderConfig, EventService};
 use anyhow::Result;
 use sqlx::{SqlitePool, Row};
 use std::sync::Arc;
@@ -10,6 +10,7 @@ use uuid::Uuid;
 
 pub struct SessionService {
     db: SqlitePool,
+    app_state: Arc<AppState>,
     session_recorder: Option<SessionRecorderService>,
 }
 
@@ -17,6 +18,7 @@ impl SessionService {
     pub fn new(app_state: Arc<AppState>) -> Self {
         Self {
             db: app_state.db.clone(),
+            app_state: app_state.clone(),
             session_recorder: None,
         }
     }
@@ -27,6 +29,7 @@ impl SessionService {
 
         Ok(Self {
             db: app_state.db.clone(),
+            app_state: app_state.clone(),
             session_recorder,
         })
     }
@@ -64,6 +67,12 @@ impl SessionService {
         .bind(&session.session_type)
         .execute(&self.db)
         .await?;
+
+        // Update event session to track current DJ and set next draw time
+        let event_service = EventService::new(self.app_state.clone());
+        if let Err(e) = event_service.start_next_dj_slot(session.dj_id.clone()).await {
+            tracing::warn!("Failed to update event session: {}", e);
+        }
 
         // Get DJ name for response
         let dj_name = self.get_dj_name(&session.dj_id).await?;

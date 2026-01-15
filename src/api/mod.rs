@@ -8,6 +8,7 @@ mod session_routes;
 mod lottery_routes;
 mod admin_routes;
 mod session_recorder_routes;
+mod event_routes;
 
 pub fn router() -> Router<Arc<AppState>> {
     Router::new()
@@ -16,4 +17,5 @@ pub fn router() -> Router<Arc<AppState>> {
         .nest("/lottery", lottery_routes::router())
         .nest("/admin", admin_routes::router())
         .nest("/session-recorder", session_recorder_routes::router())
+        .nest("/event", event_routes::router())
 }

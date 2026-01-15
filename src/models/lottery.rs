@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc, Timelike};
 use serde::{Deserialize, Serialize};
 use crate::models::dj::{Dj, DjResponse};
+use crate::models::event_session::EventSession;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct LotteryDraw {
@@ -53,12 +54,12 @@ impl LotteryEngine {
         Self { config }
     }
 
-    pub fn calculate_weights(&self, djs: &[Dj]) -> Vec<LotteryParticipant> {
+    pub fn calculate_weights(&self, djs: &[Dj], event: Option<&EventSession>) -> Vec<LotteryParticipant> {
         let total_participants = djs.len() as f64;
         let mut participants = Vec::new();
 
         for dj in djs {
-            let calculated_weight = self.calculate_individual_weight(dj);
+            let calculated_weight = self.calculate_individual_weight(dj, event);
             participants.push(LotteryParticipant {
                 dj: dj.clone().into(),
                 calculated_weight,
@@ -75,20 +76,21 @@ impl LotteryEngine {
         participants
     }
 
-    fn calculate_individual_weight(&self, dj: &Dj) -> f64 {
+    fn calculate_individual_weight(&self, dj: &Dj, event: Option<&EventSession>) -> f64 {
         let mut weight = dj.weight * self.config.base_weight;
 
-        // Apply late arrival penalty
-        let current_hour = Utc::now().hour();
-        if current_hour >= 24 {
-            weight *= self.config.late_arrival_penalty;
+        // Apply late arrival penalty based on event start time
+        if let Some(event) = event {
+            if event.should_apply_late_penalty(dj.registered_at) {
+                weight *= self.config.late_arrival_penalty;
+            }
         }
 
         // Apply time-based fairness (earlier arrivals get slightly higher weight)
         let hours_registered = Utc::now()
             .signed_duration_since(dj.registered_at)
             .num_hours() as f64;
-        
+
         if hours_registered > 0.0 {
             // Small bonus for being registered longer (max 20% bonus)
             let time_bonus = (hours_registered / 10.0).min(0.2);
@@ -98,14 +100,14 @@ impl LotteryEngine {
         weight.max(0.1) // Ensure minimum weight
     }
 
-    pub fn draw_winner(&self, djs: &[Dj]) -> Option<LotteryDraw> {
+    pub fn draw_winner(&self, djs: &[Dj], event: Option<&EventSession>) -> Option<LotteryDraw> {
         if djs.is_empty() {
             return None;
         }
 
-        let participants = self.calculate_weights(djs);
+        let participants = self.calculate_weights(djs, event);
         let total_weight: f64 = participants.iter().map(|p| p.calculated_weight).sum();
-        
+
         if total_weight <= 0.0 {
             return None;
         }

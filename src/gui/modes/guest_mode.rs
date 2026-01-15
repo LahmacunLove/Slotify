@@ -2,10 +2,12 @@ use eframe::egui;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 use serde_json::Value;
+use crate::api_client::{ApiClient, EventSessionResponse, Timetable};
 
 pub struct GuestMode {
     rt: Arc<Runtime>,
     api_base_url: String,
+    api_client: ApiClient,
     guest_name: String,
     guest_email: String,
     message: String,
@@ -13,6 +15,9 @@ pub struct GuestMode {
     previous_dj: Option<Value>,
     request_status: RequestStatus,
     qr_code_visible: bool,
+    current_event: Option<EventSessionResponse>,
+    timetable: Option<Timetable>,
+    last_refresh: std::time::Instant,
 }
 
 #[derive(Debug, Clone)]
@@ -25,9 +30,11 @@ enum RequestStatus {
 
 impl GuestMode {
     pub fn new(rt: Arc<Runtime>, api_base_url: String) -> Self {
+        let api_client = ApiClient::new(api_base_url.clone());
         Self {
             rt,
             api_base_url,
+            api_client,
             guest_name: String::new(),
             guest_email: String::new(),
             message: String::new(),
@@ -35,25 +42,37 @@ impl GuestMode {
             previous_dj: None,
             request_status: RequestStatus::None,
             qr_code_visible: false,
+            current_event: None,
+            timetable: None,
+            last_refresh: std::time::Instant::now(),
         }
     }
 
     pub fn render(&mut self, ui: &mut egui::Ui) {
-        ui.heading("👥 Guest Mode");
-        ui.add_space(10.0);
-
-        // Show current DJ information
-        self.render_current_dj_info(ui);
-        ui.add_space(20.0);
-
-        // QR Code section
-        self.render_qr_section(ui);
-        ui.add_space(20.0);
-
-        // Request form (only show if QR code is "scanned")
-        if self.qr_code_visible {
-            self.render_request_form(ui);
+        // Auto-refresh every 2 seconds
+        if self.last_refresh.elapsed() > std::time::Duration::from_secs(2) {
+            self.refresh_event_status();
+            self.refresh_timetable();
+            self.last_refresh = std::time::Instant::now();
         }
+
+        // Two-column layout (no main heading)
+        ui.columns(2, |columns| {
+            // LEFT COLUMN: Timetable (no heading, more space)
+            self.render_timetable(&mut columns[0]);
+
+            // RIGHT COLUMN: Guest Request Features (no heading)
+            self.render_qr_section(&mut columns[1]);
+            columns[1].add_space(20.0);
+            if self.qr_code_visible {
+                self.render_request_form(&mut columns[1]);
+            }
+        });
+
+        // Event status in footer
+        ui.add_space(20.0);
+        ui.separator();
+        self.render_event_status(ui);
     }
 
     fn render_current_dj_info(&mut self, ui: &mut egui::Ui) {
@@ -93,7 +112,9 @@ impl GuestMode {
 
     fn render_qr_section(&mut self, ui: &mut egui::Ui) {
         ui.group(|ui| {
-            ui.heading("📱 Request DJ Set");
+            ui.vertical_centered(|ui| {
+                ui.heading("📱 Request DJ Set");
+            });
             ui.add_space(10.0);
 
             if !self.qr_code_visible {
@@ -243,5 +264,112 @@ impl GuestMode {
         self.guest_email.clear();
         self.message.clear();
         self.request_status = RequestStatus::None;
+    }
+
+    fn render_event_status(&mut self, ui: &mut egui::Ui) {
+        // Compact footer-style event status
+        ui.horizontal(|ui| {
+            if let Some(event) = &self.current_event {
+                ui.colored_label(egui::Color32::from_rgb(0, 200, 0), "🟢 Event Active");
+                ui.separator();
+                ui.label(format!("⏱️ {} min elapsed", event.elapsed_minutes));
+                ui.separator();
+                ui.label(format!("Slot: {} min", event.slot_duration_minutes));
+
+                if let Some(current_dj_name) = &event.current_dj_name {
+                    ui.separator();
+                    ui.strong("🎵");
+                    ui.label(current_dj_name);
+
+                    if let Some(progress) = event.current_slot_progress_percent {
+                        ui.separator();
+                        let progress_bar = egui::ProgressBar::new(progress / 100.0)
+                            .text(format!("{:.0}%", progress));
+                        ui.add(progress_bar);
+                    }
+                }
+            } else {
+                ui.colored_label(egui::Color32::from_rgb(200, 0, 0), "🔴 No event running");
+            }
+
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.button("🔄 Refresh").clicked() {
+                    self.refresh_event_status();
+                    self.refresh_timetable();
+                }
+            });
+        });
+    }
+
+    fn render_timetable(&mut self, ui: &mut egui::Ui) {
+        // No heading, more space for content
+        ui.group(|ui| {
+            if let Some(timetable) = &self.timetable {
+                ui.horizontal(|ui| {
+                    ui.label(format!("📊 {} DJs", timetable.total_djs));
+                    ui.separator();
+                    ui.label(format!("✅ {} completed", timetable.completed_sets));
+                });
+                ui.add_space(5.0);
+
+                egui::ScrollArea::vertical()
+                    .max_height(500.0)
+                    .show(ui, |ui| {
+                        for entry in &timetable.entries {
+                            ui.horizontal(|ui| {
+                                // Position number with fixed width
+                                ui.label(format!("{}.", entry.position));
+
+                                // DJ name
+                                ui.label(&entry.dj_name);
+
+                                ui.separator();
+
+                                // Status with color
+                                let (status_text, status_color) = match entry.status.as_str() {
+                                    "Completed" => ("✅ Done", egui::Color32::GREEN),
+                                    "InProgress" => ("▶️ Playing", egui::Color32::YELLOW),
+                                    _ => ("⏳ Upcoming", egui::Color32::GRAY),
+                                };
+                                ui.colored_label(status_color, status_text);
+
+                                // Duration if completed
+                                if let Some(duration) = entry.duration_minutes {
+                                    ui.label(format!("({} min)", duration));
+                                }
+                            });
+                        }
+                    });
+            } else {
+                ui.vertical_centered(|ui| {
+                    ui.add_space(50.0);
+                    ui.label("📋 No timetable yet");
+                    ui.label("Start an event in Admin mode");
+                    ui.add_space(50.0);
+                });
+            }
+        });
+    }
+
+    fn refresh_event_status(&mut self) {
+        match self.api_client.get_current_event() {
+            Ok(event) => {
+                self.current_event = event;
+            }
+            Err(_) => {
+                self.current_event = None;
+            }
+        }
+    }
+
+    fn refresh_timetable(&mut self) {
+        match self.api_client.get_timetable() {
+            Ok(timetable) => {
+                self.timetable = timetable;
+            }
+            Err(_) => {
+                self.timetable = None;
+            }
+        }
     }
 }

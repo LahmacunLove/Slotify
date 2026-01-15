@@ -37,14 +37,16 @@ dotenv = "0.15"
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+env_logger = "0.11"
 
 # GUI Framework (egui for native cross-platform GUI)
 eframe = "0.29"
 egui = "0.29"
 egui_extras = "0.29"
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 
 # HTTP client for external services
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { version = "0.12", features = ["json", "blocking"] }
 
 # MinIO/S3 client
 aws-sdk-s3 = "1.0"

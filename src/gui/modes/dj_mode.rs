@@ -1,17 +1,20 @@
 use eframe::egui;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
-use serde_json::Value;
+use crate::api_client::{ApiClient, DjResponse, EventSessionResponse};
 
 pub struct DjMode {
     rt: Arc<Runtime>,
     api_base_url: String,
+    api_client: ApiClient,
     dj_name: String,
     dj_email: String,
     registration_status: RegistrationStatus,
-    current_queue: Vec<Value>,
-    next_dj: Option<Value>,
+    current_queue: Vec<DjResponse>,
+    next_dj: Option<DjResponse>,
+    current_event: Option<EventSessionResponse>,
     error_message: Option<String>,
+    success_message: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -24,21 +27,35 @@ enum RegistrationStatus {
 
 impl DjMode {
     pub fn new(rt: Arc<Runtime>, api_base_url: String) -> Self {
+        let api_client = ApiClient::new(api_base_url.clone());
         Self {
             rt,
             api_base_url,
+            api_client,
             dj_name: String::new(),
             dj_email: String::new(),
             registration_status: RegistrationStatus::NotRegistered,
             current_queue: Vec::new(),
             next_dj: None,
+            current_event: None,
             error_message: None,
+            success_message: None,
         }
     }
 
     pub fn render(&mut self, ui: &mut egui::Ui) {
-        ui.heading("🎧 DJ Mode");
+        ui.heading("📝 DJ Registration");
         ui.add_space(10.0);
+
+        // Display error/success messages
+        if let Some(error) = &self.error_message {
+            ui.colored_label(egui::Color32::RED, format!("❌ {}", error));
+            ui.add_space(5.0);
+        }
+        if let Some(success) = &self.success_message {
+            ui.colored_label(egui::Color32::GREEN, format!("✅ {}", success));
+            ui.add_space(5.0);
+        }
 
         match &self.registration_status {
             RegistrationStatus::NotRegistered => {
@@ -48,7 +65,8 @@ impl DjMode {
                 ui.label("⏳ Registering for lottery...");
             }
             RegistrationStatus::Registered(dj_id) => {
-                self.render_registered_interface(ui, dj_id);
+                let dj_id_clone = dj_id.clone();
+                self.render_registered_interface(ui, &dj_id_clone);
             }
             RegistrationStatus::Error(error) => {
                 ui.colored_label(egui::Color32::RED, format!("❌ Error: {}", error));
@@ -62,6 +80,55 @@ impl DjMode {
 
         ui.add_space(20.0);
         self.render_current_queue(ui);
+    }
+
+    fn render_event_status(&mut self, ui: &mut egui::Ui) {
+        ui.group(|ui| {
+            ui.heading("📅 Event Status");
+            ui.add_space(5.0);
+
+            if let Some(event) = &self.current_event {
+                ui.horizontal(|ui| {
+                    ui.colored_label(egui::Color32::from_rgb(0, 200, 0), "🟢 Event Active");
+                    ui.label(format!("| Running for {} minutes", event.elapsed_minutes));
+                });
+
+                ui.add_space(5.0);
+
+                if let Some(current_dj_name) = &event.current_dj_name {
+                    ui.horizontal(|ui| {
+                        ui.strong("🎵 Currently playing:");
+                        ui.label(current_dj_name);
+                    });
+
+                    if let Some(progress) = event.current_slot_progress_percent {
+                        ui.add_space(3.0);
+                        ui.horizontal(|ui| {
+                            ui.label(format!("Slot progress: {:.0}%", progress));
+                            let progress_bar = egui::ProgressBar::new(progress / 100.0)
+                                .text(format!("{:.0}%", progress));
+                            ui.add(progress_bar);
+                        });
+                    }
+                } else {
+                    ui.label("⏳ Waiting for first DJ to start...");
+                }
+
+                ui.add_space(5.0);
+                ui.horizontal(|ui| {
+                    ui.label(format!("⏱️  Slot duration: {} minutes", event.slot_duration_minutes));
+                    ui.separator();
+                    ui.label(format!("⚠️  Late penalty after: {} hours", event.late_arrival_cutoff_hours));
+                });
+            } else {
+                ui.colored_label(egui::Color32::from_rgb(200, 0, 0), "🔴 No event running");
+                ui.label("Waiting for admin to start the event...");
+            }
+        });
+
+        if ui.button("🔄 Refresh Event Status").clicked() {
+            self.refresh_event_status();
+        }
     }
 
     fn render_registration_form(&mut self, ui: &mut egui::Ui) {
@@ -104,8 +171,15 @@ impl DjMode {
                     self.remove_from_lottery(dj_id);
                 }
 
-                if ui.button("🎵 Start Session").clicked() {
-                    self.start_session(dj_id);
+                ui.separator();
+
+                if ui.button("➕ Register Another DJ").clicked() {
+                    // Reset to registration form but keep current DJ registered
+                    self.registration_status = RegistrationStatus::NotRegistered;
+                    self.dj_name.clear();
+                    self.dj_email.clear();
+                    self.error_message = None;
+                    self.success_message = Some("Previous DJ still registered. Add another!".to_string());
                 }
             });
 
@@ -113,7 +187,7 @@ impl DjMode {
 
             // Show position in queue if available
             if let Some(next_dj) = &self.next_dj {
-                if next_dj.get("id").and_then(|v| v.as_str()) == Some(dj_id) {
+                if next_dj.id == dj_id {
                     ui.colored_label(egui::Color32::GREEN, "🎉 You're next up!");
                 } else {
                     ui.label("⏳ Waiting in lottery pool...");
@@ -132,9 +206,7 @@ impl DjMode {
             if let Some(next_dj) = &self.next_dj {
                 ui.horizontal(|ui| {
                     ui.strong("🎵 Next DJ:");
-                    ui.label(next_dj.get("name")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("Unknown"));
+                    ui.label(&next_dj.name);
                 });
                 ui.add_space(10.0);
             }
@@ -142,20 +214,15 @@ impl DjMode {
             if self.current_queue.is_empty() {
                 ui.label("No DJs in queue yet");
             } else {
-                ui.label(format!("📋 {} DJs in lottery pool", self.current_queue.len()));
-                
+                ui.label(format!("📋 {} DJs in queue", self.current_queue.len()));
+
                 for (i, dj) in self.current_queue.iter().enumerate() {
                     ui.horizontal(|ui| {
-                        ui.label(format!("{}.", i + 1));
-                        ui.label(dj.get("name")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("Unknown"));
-                        
-                        if let Some(registered_at) = dj.get("registered_at")
-                            .and_then(|v| v.as_str()) {
-                            ui.label(format!("(registered: {})", 
-                                registered_at.split('T').next().unwrap_or("")));
-                        }
+                        ui.label(format!("{}.", dj.position_in_queue.unwrap_or(i as i32 + 1)));
+                        ui.label(&dj.name);
+
+                        let registered_date = dj.registered_at.split('T').next().unwrap_or("");
+                        ui.label(format!("(registered: {})", registered_date));
                     });
                 }
             }
@@ -168,61 +235,75 @@ impl DjMode {
     }
 
     fn register_dj(&mut self) {
-        self.registration_status = RegistrationStatus::Registering;
-        
-        let rt = self.rt.clone();
-        let api_url = format!("{}/djs/register", self.api_base_url);
+        self.error_message = None;
+        self.success_message = None;
+
+        if self.dj_name.trim().is_empty() {
+            self.error_message = Some("DJ name cannot be empty".to_string());
+            return;
+        }
+
         let name = self.dj_name.clone();
         let email = if self.dj_email.trim().is_empty() {
-            None
+            "".to_string()
         } else {
-            Some(self.dj_email.clone())
+            self.dj_email.clone()
         };
 
-        // TODO: Implement actual HTTP request
-        // For now, simulate registration
-        std::thread::spawn(move || {
-            std::thread::sleep(std::time::Duration::from_secs(1));
-            // Simulate successful registration
-            // In real implementation, make HTTP request here
-        });
-
-        // Simulate successful registration for demo
-        self.registration_status = RegistrationStatus::Registered("demo-dj-id".to_string());
+        match self.api_client.register_dj(name, email) {
+            Ok(dj) => {
+                self.registration_status = RegistrationStatus::Registered(dj.id.clone());
+                self.success_message = Some(format!("Successfully registered as '{}'!", dj.name));
+                self.refresh_queue();
+            }
+            Err(e) => {
+                self.registration_status = RegistrationStatus::Error(e.clone());
+                self.error_message = Some(format!("Failed to register: {}", e));
+            }
+        }
     }
 
     fn remove_from_lottery(&mut self, dj_id: &str) {
-        // TODO: Implement HTTP request to remove DJ
-        self.registration_status = RegistrationStatus::NotRegistered;
-        self.dj_name.clear();
-        self.dj_email.clear();
-    }
+        self.error_message = None;
+        self.success_message = None;
 
-    fn start_session(&mut self, dj_id: &str) {
-        // TODO: Implement HTTP request to start session
-        // For now, just show a message
-        self.error_message = Some("Session starting feature will be implemented".to_string());
+        match self.api_client.delete_dj(dj_id) {
+            Ok(_) => {
+                self.registration_status = RegistrationStatus::NotRegistered;
+                let name = self.dj_name.clone();
+                self.dj_name.clear();
+                self.dj_email.clear();
+                self.success_message = Some(format!("'{}' removed from lottery", name));
+                self.refresh_queue();
+            }
+            Err(e) => {
+                self.error_message = Some(format!("Failed to remove from lottery: {}", e));
+            }
+        }
     }
 
     fn refresh_queue(&mut self) {
-        // TODO: Implement HTTP request to get current queue
-        // For now, simulate some data
-        self.current_queue = vec![
-            serde_json::json!({
-                "id": "dj1",
-                "name": "DJ Example",
-                "registered_at": "2024-01-01T12:00:00Z"
-            }),
-            serde_json::json!({
-                "id": "dj2", 
-                "name": "Another DJ",
-                "registered_at": "2024-01-01T12:30:00Z"
-            }),
-        ];
+        // Get lottery queue (DJs that have been drawn)
+        match self.api_client.get_lottery_queue() {
+            Ok(queue) => {
+                self.current_queue = queue.clone();
+                // Next DJ is the first in queue
+                self.next_dj = queue.first().cloned();
+            }
+            Err(e) => {
+                self.error_message = Some(format!("Failed to load queue: {}", e));
+            }
+        }
+    }
 
-        self.next_dj = Some(serde_json::json!({
-            "id": "next-dj",
-            "name": "Next Up DJ"
-        }));
+    fn refresh_event_status(&mut self) {
+        match self.api_client.get_current_event() {
+            Ok(event) => {
+                self.current_event = event;
+            }
+            Err(e) => {
+                self.error_message = Some(format!("Failed to load event status: {}", e));
+            }
+        }
     }
 }

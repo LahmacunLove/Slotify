@@ -5,6 +5,7 @@ use tokio::runtime::Runtime;
 mod app;
 mod components;
 mod modes;
+mod api_client;
 
 use app::DjSystemApp;
 
@@ -29,8 +30,8 @@ fn main() -> Result<(), eframe::Error> {
         Box::new(|cc| {
             // Set up fonts for better touch interface
             setup_custom_style(&cc.egui_ctx);
-            
-            Box::new(DjSystemApp::new(rt))
+
+            Ok(Box::new(DjSystemApp::new(rt)))
         }),
     )
 }

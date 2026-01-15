@@ -1,6 +1,7 @@
 use crate::models::{
     dj::{Dj, DjResponse},
     lottery::{LotteryDraw, LotteryEngine, LotteryConfig, LotteryParticipant, LotteryStatistics},
+    event_session::EventSession,
     AppState,
 };
 use anyhow::Result;
@@ -46,22 +47,40 @@ impl LotteryService {
 
     pub async fn draw_next_dj(&self) -> Result<Option<LotteryDraw>> {
         let eligible_djs = self.get_eligible_djs().await?;
-        
+
         if eligible_djs.is_empty() {
             return Ok(None);
         }
 
-        let draw_result = self.engine.draw_winner(&eligible_djs);
-        
+        // Get active event for late arrival penalty calculation
+        let event = self.get_active_event().await?;
+
+        let draw_result = self.engine.draw_winner(&eligible_djs, event.as_ref());
+
         if let Some(ref draw) = draw_result {
             // Save the draw to database
             self.save_lottery_draw(draw).await?;
-            
+
             // Update the winner's position in queue
             self.assign_next_position(&draw.winner.id).await?;
         }
 
         Ok(draw_result)
+    }
+
+    async fn get_active_event(&self) -> Result<Option<EventSession>> {
+        let event = sqlx::query_as::<_, EventSession>(
+            r#"
+            SELECT * FROM event_sessions
+            WHERE is_active = true AND ended_at IS NULL
+            ORDER BY started_at DESC
+            LIMIT 1
+            "#,
+        )
+        .fetch_optional(&self.db)
+        .await?;
+
+        Ok(event)
     }
 
     pub async fn save_lottery_draw(&self, draw: &LotteryDraw) -> Result<()> {

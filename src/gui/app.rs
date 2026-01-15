@@ -2,7 +2,7 @@ use eframe::egui;
 use std::sync::Arc;
 use tokio::runtime::Runtime;
 
-use crate::gui::modes::{Mode, DjMode, GuestMode, AdminMode};
+use crate::modes::{Mode, DjMode, GuestMode, AdminMode};
 
 pub struct DjSystemApp {
     rt: Arc<Runtime>,
@@ -11,12 +11,13 @@ pub struct DjSystemApp {
     guest_mode: GuestMode,
     admin_mode: AdminMode,
     api_base_url: String,
+    logo_texture: Option<egui::TextureHandle>,
 }
 
 impl DjSystemApp {
     pub fn new(rt: Arc<Runtime>) -> Self {
         let api_base_url = "http://localhost:3000/api".to_string();
-        
+
         Self {
             rt: rt.clone(),
             current_mode: Mode::DJ,
@@ -24,6 +25,32 @@ impl DjSystemApp {
             guest_mode: GuestMode::new(rt.clone(), api_base_url.clone()),
             admin_mode: AdminMode::new(rt.clone(), api_base_url.clone()),
             api_base_url,
+            logo_texture: None,
+        }
+    }
+
+    fn load_logo(&mut self, ctx: &egui::Context) {
+        if self.logo_texture.is_some() {
+            return; // Already loaded
+        }
+
+        // Try to load logo from assets folder
+        let logo_path = "assets/logo.jpg";
+        if let Ok(image_data) = std::fs::read(logo_path) {
+            if let Ok(image) = image::load_from_memory(&image_data) {
+                let size = [image.width() as _, image.height() as _];
+                let image_buffer = image.to_rgba8();
+                let pixels = image_buffer.as_flat_samples();
+                let color_image = egui::ColorImage::from_rgba_unmultiplied(
+                    size,
+                    pixels.as_slice(),
+                );
+                self.logo_texture = Some(ctx.load_texture(
+                    "logo",
+                    color_image,
+                    egui::TextureOptions::LINEAR,
+                ));
+            }
         }
     }
 
@@ -33,14 +60,14 @@ impl DjSystemApp {
             
             if ui.selectable_label(
                 matches!(self.current_mode, Mode::DJ),
-                "🎧 DJ Mode"
+                "📝 DJ Registration"
             ).clicked() {
                 self.current_mode = Mode::DJ;
             }
 
             if ui.selectable_label(
                 matches!(self.current_mode, Mode::Guest),
-                "👥 Guest Mode"
+                "🎵 Session"
             ).clicked() {
                 self.current_mode = Mode::Guest;
             }
@@ -70,10 +97,19 @@ impl DjSystemApp {
 
 impl eframe::App for DjSystemApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Load logo on first frame
+        self.load_logo(ctx);
+
         egui::CentralPanel::default().show(ctx, |ui| {
-            // Title
+            // Title with logo
             ui.vertical_centered(|ui| {
-                ui.heading("🎵 DJ Session Recorder & Lottery System");
+                // Display logo if available
+                if let Some(logo) = &self.logo_texture {
+                    let logo_size = egui::vec2(150.0, 150.0); // Adjust size as needed
+                    ui.add(egui::Image::new(logo).fit_to_exact_size(logo_size));
+                    ui.add_space(5.0);
+                }
+                ui.heading("🎵 DA Slotify");
                 ui.add_space(10.0);
             });
 

@@ -7,10 +7,12 @@ use uuid::Uuid;
 pub mod dj;
 pub mod session;
 pub mod lottery;
+pub mod event_session;
 
 pub use dj::*;
 pub use session::*;
 pub use lottery::*;
+pub use event_session::*;
 
 #[derive(Clone)]
 pub struct AppState {

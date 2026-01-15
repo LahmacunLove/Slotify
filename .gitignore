@@ -72,3 +72,7 @@ sessions/
 
 # Analysis files (internal documentation)
 SESSION_RECORDER_ANALYSIS.md
+
+# Logo files
+logo.jpg
+assets/logo.jpgsession-recorder/
