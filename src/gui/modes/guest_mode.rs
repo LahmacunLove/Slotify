@@ -317,26 +317,24 @@ impl GuestMode {
                     .show(ui, |ui| {
                         for entry in &timetable.entries {
                             ui.horizontal(|ui| {
-                                // Position number with fixed width
-                                ui.label(format!("{}.", entry.position));
-
-                                // DJ name
-                                ui.label(&entry.dj_name);
-
-                                ui.separator();
-
-                                // Status with color
-                                let (status_text, status_color) = match entry.status.as_str() {
-                                    "Completed" => ("✅ Done", egui::Color32::GREEN),
-                                    "InProgress" => ("▶️ Playing", egui::Color32::YELLOW),
-                                    _ => ("⏳ Upcoming", egui::Color32::GRAY),
+                                // Parse and format start time as HH:MM
+                                let start_time = if let Ok(datetime) = chrono::DateTime::parse_from_rfc3339(&entry.started_at) {
+                                    datetime.format("%H:%M").to_string()
+                                } else {
+                                    "--:--".to_string()
                                 };
-                                ui.colored_label(status_color, status_text);
 
-                                // Duration if completed
-                                if let Some(duration) = entry.duration_minutes {
-                                    ui.label(format!("({} min)", duration));
-                                }
+                                // Status indicator
+                                let status_indicator = match entry.status.as_str() {
+                                    "Completed" => "✅",
+                                    "InProgress" => "▶️",
+                                    _ => "⏳",
+                                };
+
+                                ui.label(status_indicator);
+                                ui.label(start_time);
+                                ui.label("|");
+                                ui.label(&entry.dj_name);
                             });
                         }
                     });

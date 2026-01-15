@@ -570,20 +570,24 @@ impl AdminMode {
                         .show(ui, |ui| {
                             for entry in &timetable.entries {
                                 ui.horizontal(|ui| {
-                                    ui.label(format!("{}.", entry.position));
-                                    ui.label(&entry.dj_name);
-                                    ui.separator();
-
-                                    let status_color = match entry.status.as_str() {
-                                        "Completed" => egui::Color32::GREEN,
-                                        "InProgress" => egui::Color32::YELLOW,
-                                        _ => egui::Color32::GRAY,
+                                    // Parse and format start time as HH:MM
+                                    let start_time = if let Ok(datetime) = chrono::DateTime::parse_from_rfc3339(&entry.started_at) {
+                                        datetime.format("%H:%M").to_string()
+                                    } else {
+                                        "--:--".to_string()
                                     };
-                                    ui.colored_label(status_color, &entry.status);
 
-                                    if let Some(duration) = entry.duration_minutes {
-                                        ui.label(format!("({} min)", duration));
-                                    }
+                                    // Status indicator
+                                    let status_indicator = match entry.status.as_str() {
+                                        "Completed" => "✅",
+                                        "InProgress" => "▶️",
+                                        _ => "⏳",
+                                    };
+
+                                    ui.label(status_indicator);
+                                    ui.label(start_time);
+                                    ui.label("|");
+                                    ui.label(&entry.dj_name);
                                 });
                             }
                         });
