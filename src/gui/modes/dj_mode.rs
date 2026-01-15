@@ -15,6 +15,7 @@ pub struct DjMode {
     current_event: Option<EventSessionResponse>,
     error_message: Option<String>,
     success_message: Option<String>,
+    last_refresh: std::time::Instant,
 }
 
 #[derive(Debug, Clone)]
@@ -40,10 +41,17 @@ impl DjMode {
             current_event: None,
             error_message: None,
             success_message: None,
+            last_refresh: std::time::Instant::now(),
         }
     }
 
     pub fn render(&mut self, ui: &mut egui::Ui) {
+        // Auto-refresh every 3 seconds
+        if self.last_refresh.elapsed() > std::time::Duration::from_secs(3) {
+            self.refresh_queue();
+            self.last_refresh = std::time::Instant::now();
+        }
+
         ui.heading("📝 DJ Registration");
         ui.add_space(10.0);
 
@@ -204,31 +212,37 @@ impl DjMode {
 
     fn render_current_queue(&mut self, ui: &mut egui::Ui) {
         ui.group(|ui| {
-            ui.heading("Current Queue");
+            ui.heading("Registered DJs");
             ui.add_space(10.0);
 
             if let Some(next_dj) = &self.next_dj {
                 ui.horizontal(|ui| {
-                    ui.strong("🎵 Next DJ:");
+                    ui.strong("🎵 Next to play:");
                     ui.label(&next_dj.name);
                 });
                 ui.add_space(10.0);
             }
 
             if self.current_queue.is_empty() {
-                ui.label("No DJs in queue yet");
+                ui.label("No DJs registered yet");
             } else {
-                ui.label(format!("📋 {} DJs in queue", self.current_queue.len()));
+                ui.label(format!("📋 {} DJs registered", self.current_queue.len()));
 
-                for (i, dj) in self.current_queue.iter().enumerate() {
-                    ui.horizontal(|ui| {
-                        ui.label(format!("{}.", dj.position_in_queue.unwrap_or(i as i32 + 1)));
-                        ui.label(&dj.name);
+                egui::ScrollArea::vertical()
+                    .max_height(300.0)
+                    .show(ui, |ui| {
+                        for (i, dj) in self.current_queue.iter().enumerate() {
+                            ui.horizontal(|ui| {
+                                ui.label(format!("{}.", i + 1));
+                                ui.label(&dj.name);
 
-                        let registered_date = dj.registered_at.split('T').next().unwrap_or("");
-                        ui.label(format!("(registered: {})", registered_date));
+                                // Show queue position if drawn
+                                if let Some(pos) = dj.position_in_queue {
+                                    ui.colored_label(egui::Color32::GREEN, format!("(drawn: #{})", pos));
+                                }
+                            });
+                        }
                     });
-                }
             }
         });
 
@@ -287,15 +301,26 @@ impl DjMode {
     }
 
     fn refresh_queue(&mut self) {
-        // Get lottery queue (DJs that have been drawn)
-        match self.api_client.get_lottery_queue() {
-            Ok(queue) => {
-                self.current_queue = queue.clone();
-                // Next DJ is the first in queue
-                self.next_dj = queue.first().cloned();
+        // Get all registered DJs (active DJs in the lottery pool)
+        match self.api_client.get_all_djs() {
+            Ok(all_djs) => {
+                // Filter for active DJs
+                self.current_queue = all_djs.into_iter()
+                    .filter(|dj| dj.is_active)
+                    .collect();
+
+                // Next DJ is the first in lottery queue (if drawn)
+                match self.api_client.get_lottery_queue() {
+                    Ok(queue) => {
+                        self.next_dj = queue.first().cloned();
+                    }
+                    Err(_) => {
+                        self.next_dj = None;
+                    }
+                }
             }
             Err(e) => {
-                self.error_message = Some(format!("Failed to load queue: {}", e));
+                self.error_message = Some(format!("Failed to load DJs: {}", e));
             }
         }
     }

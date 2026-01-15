@@ -203,15 +203,25 @@ impl ApiClient {
     }
 
     pub fn clear_all_data(&self) -> Result<(), String> {
-        // Clear all data by resetting lottery and ending event
-        let _ = self.end_event(); // End event if running
-        let _ = self.reset_lottery(); // Clear lottery queue
+        // End event if running (ignore error if no event)
+        let _ = self.end_event();
 
-        // Delete all DJs
-        if let Ok(djs) = self.get_all_djs() {
-            for dj in djs {
-                let _ = self.delete_dj(&dj.id);
+        // Reset lottery queue (ignore error if nothing to reset)
+        let _ = self.reset_lottery();
+
+        // Delete all DJs - this is critical, so check for errors
+        let djs = self.get_all_djs()
+            .map_err(|e| format!("Failed to get DJs list: {}", e))?;
+
+        let mut failed_deletions = Vec::new();
+        for dj in djs {
+            if let Err(e) = self.delete_dj(&dj.id) {
+                failed_deletions.push(format!("{}: {}", dj.name, e));
             }
+        }
+
+        if !failed_deletions.is_empty() {
+            return Err(format!("Failed to delete some DJs: {}", failed_deletions.join(", ")));
         }
 
         Ok(())
