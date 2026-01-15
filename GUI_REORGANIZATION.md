@@ -1,107 +1,161 @@
 # GUI Reorganization - Complete!
 
-## Changes Made
+## Overview
+The DA Slotify GUI has been reorganized into a clean, efficient three-tab interface with consistent two-column layouts and automatic refresh capabilities.
 
-### 1. Tab Names Updated ✅
-- **"DJ Mode"** → **"📝 DJ Registration"**
-- **"Guest Mode"** → **"🎵 Session"**
-- **"Admin Mode"** → **"⚙️ Admin Mode"** (unchanged)
+## Tab Structure
 
-### 2. DJ Registration Tab (formerly DJ Mode) ✅
-**Changes:**
-- Removed event status display
-- Focused solely on DJ registration functionality
-- Shows:
-  - Registration form
-  - Queue status for registered DJ
-  - "Start Session" button
+### 1. 📝 DJ Registration
+**Purpose**: Register DJs for the lottery
 
-### 3. Session Tab (formerly Guest Mode) ✅
-**Major Reorganization - Two Column Layout:**
+**Layout**: Two-column
+- **Left Column**: Registration form
+  - Name input
+  - Email input (optional)
+  - Register button
+  - Status messages
 
-#### LEFT COLUMN: Event & Timetable
-- **Event Status Panel:**
-  - Active/Inactive indicator
-  - Event elapsed time
-  - Currently playing DJ with progress bar
-  - Slot duration information
-  - Refresh button
+- **Right Column**: Registered DJs list
+  - Shows all active DJs
+  - Indicates which DJs have been drawn
+  - "Next to play" indicator
+  - Auto-refresh every 3 seconds
 
-- **Timetable Panel:**
-  - Complete list of all DJs
-  - Position numbers
-  - DJ names
-  - Status indicators:
-    - ✅ Done (green) - Completed sets
-    - ▶️ Playing (yellow) - Currently playing
-    - ⏳ Upcoming (gray) - Waiting in queue
-  - Duration for completed sets
-  - Scrollable list
-  - Refresh button
+**Features**:
+- Simple, focused registration interface
+- Real-time queue visibility
+- No session control (admin-only function)
 
-#### RIGHT COLUMN: Guest Requests
-- **Now Playing Panel** (unchanged)
-  - Current DJ info
-  - Previous DJ info
+### 2. 🎵 Session
+**Purpose**: Monitor event progress and timetable
 
-- **QR Code Panel** (unchanged)
-  - QR code for requesting sets
-  - Simulate scan button
+**Layout**: Two-column
+- **Left Column**: Event monitoring
+  - **Event Status** (footer):
+    - Active/inactive indicator
+    - Elapsed time since event start
+    - Current DJ with progress bar
+    - Slot duration info
+  - **Timetable** (main area, 400px fixed height):
+    - Format: Status | Time | DJ Name
+    - ✅ Completed sets
+    - ▶️ Currently playing
+    - ⏳ Upcoming DJs
+    - Scrollable list
 
-- **Request Form** (unchanged)
-  - Guest name/email inputs
-  - Message field
+- **Right Column**: Guest requests
+  - QR code for set requests
+  - Request form (name, email, message)
   - Send request button
 
-## How to Use
+**Features**:
+- Auto-refresh every 2 seconds
+- Fixed timetable height for consistent layout
+- Combined event info and timetable view
 
-### Start the GUI:
-```bash
-cd /home/ffx/Projekte/slotify
-cargo run --bin gui
-```
+### 3. ⚙️ Admin Mode
+**Purpose**: Full event and system control
 
-### Workflow:
+**Layout**: Single column with sections
+- **Authentication**: Password-protected access
+- **Event Controls**:
+  - Start event (with parameters)
+  - Stop event (with confirmation)
+  - Timetable view (250px fixed height)
+- **DJ Pool Management** (two-column):
+  - Left: Add/remove DJs
+  - Right: Queue management
+- **Statistics Panel**:
+  - Lottery statistics
+  - Reset controls
+- **Data Management**:
+  - Clear all data (with confirmation)
 
-1. **DJ Registration Tab:**
-   - DJs register for the lottery
-   - See their position in queue
+**Features**:
+- Auto-refresh every 3 seconds
+- Comprehensive event configuration
+- Safety confirmations for destructive actions
 
-2. **Session Tab:**
-   - **Left side:** Monitor event progress and see complete timetable
-   - **Right side:** Guests can request DJ sets via QR code
+## Design Principles
 
-3. **Admin Mode:**
-   - Start/end events
-   - Draw DJs
-   - Full control panel
+### Consistency
+- Two-column layouts where applicable
+- Consistent spacing and padding
+- Unified emoji-based status indicators
 
-## Features
+### Auto-Refresh
+- All tabs refresh automatically
+- No manual refresh needed (buttons kept for manual control)
+- Different intervals per tab based on update frequency needs
 
-### Timetable Updates Dynamically:
-- Shows all DJs as they are drawn
-- Updates status as DJs play
-- Shows completed durations
-- Real-time progress bars
+### Fixed Heights
+- Timetables have fixed heights to prevent layout jumping
+- Session: 400px
+- Admin: 250px
+- Scrollable content for longer lists
 
-### Event Status Shows:
-- Whether event is running
-- Current DJ and progress
-- Slot duration
-- Elapsed time
+### Status Indicators
+- ✅ Green: Completed/Success
+- ▶️ Yellow: In Progress/Active
+- ⏳ Gray: Upcoming/Pending
+- 🔴 Red: Error/Inactive
 
-## Testing
+## Removed Elements
+- Event status from DJ Registration (moved to Session tab)
+- "Now Playing" card (redundant with timetable)
+- Separate "Session" and "Guest Request" headings
+- Manual "Start Session" button from DJ Registration
+- Position numbers from timetable (using time instead)
 
-To test the new layout:
-1. Start server: `cargo run --bin server`
-2. Start GUI: `cargo run --bin gui`
-3. Go to Admin → Start Event
-4. Register some DJs in DJ Registration tab
-5. Go to Session tab → See them in timetable (left side)
-6. When DJ starts session → Status changes to "Playing"
-7. Progress bar shows slot completion
+## Color Coding
+- **Green**: Success states, completed actions
+- **Yellow**: Active/in-progress states
+- **Red**: Errors, warnings, inactive states
+- **Gray**: Neutral, upcoming states
 
-## File Changes:
-- `/src/gui/app.rs` - Updated tab names
-- `/src/gui/modes/dj_mode.rs` - Removed event status, updated heading
-- `/src/gui/modes/guest_mode.rs` - Complete reorganization with two-column layout, added event status and timetable
+## Accessibility
+- Clear labels on all inputs
+- Descriptive button text
+- Color + icon combinations for status
+- Scrollable areas for long content
+- Proper spacing and touch targets
+
+## Testing Workflow
+
+1. **Start Application**:
+   - Server: `cargo run --bin server`
+   - GUI: `cargo run --bin gui`
+
+2. **Admin Setup**:
+   - Go to Admin Mode
+   - Login with password
+   - Start event with desired settings
+
+3. **DJ Registration**:
+   - Go to DJ Registration tab
+   - Register multiple DJs
+   - See them appear in right column
+
+4. **Monitor Event**:
+   - Go to Session tab
+   - Watch timetable populate
+   - See current DJ and progress
+
+5. **Admin Control**:
+   - Return to Admin Mode
+   - View full timetable
+   - Draw next DJ manually if needed
+   - End event when complete
+
+## File Changes
+- `src/gui/app.rs`: Main app with tab navigation
+- `src/gui/modes/dj_mode.rs`: DJ Registration two-column layout
+- `src/gui/modes/guest_mode.rs`: Session two-column layout with timetable
+- `src/gui/modes/admin_mode.rs`: Admin controls and management
+- `src/gui/api_client.rs`: API communication layer
+
+---
+
+**Status**: ✅ Complete and deployed
+**Version**: 0.1.0
+**Last Updated**: 2026-01-15
