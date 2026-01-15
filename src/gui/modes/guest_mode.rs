@@ -312,8 +312,10 @@ impl GuestMode {
                 });
                 ui.add_space(5.0);
 
+                // Fixed height timetable
                 egui::ScrollArea::vertical()
-                    .max_height(500.0)
+                    .min_scrolled_height(400.0)
+                    .max_height(400.0)
                     .show(ui, |ui| {
                         for entry in &timetable.entries {
                             ui.horizontal(|ui| {
@@ -339,11 +341,12 @@ impl GuestMode {
                         }
                     });
             } else {
+                // Fixed height even when empty
                 ui.vertical_centered(|ui| {
-                    ui.add_space(50.0);
+                    ui.add_space(150.0);
                     ui.label("📋 No timetable yet");
                     ui.label("Start an event in Admin mode");
-                    ui.add_space(50.0);
+                    ui.add_space(150.0);
                 });
             }
         });

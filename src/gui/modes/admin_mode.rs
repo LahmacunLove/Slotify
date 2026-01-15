@@ -565,8 +565,10 @@ impl AdminMode {
                     ui.label(format!("Total DJs: {} | Completed sets: {}",
                         timetable.total_djs, timetable.completed_sets));
 
+                    // Fixed height timetable
                     egui::ScrollArea::vertical()
-                        .max_height(200.0)
+                        .min_scrolled_height(250.0)
+                        .max_height(250.0)
                         .show(ui, |ui| {
                             for entry in &timetable.entries {
                                 ui.horizontal(|ui| {
