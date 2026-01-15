@@ -57,29 +57,33 @@ impl DjMode {
             ui.add_space(5.0);
         }
 
-        match &self.registration_status {
-            RegistrationStatus::NotRegistered => {
-                self.render_registration_form(ui);
-            }
-            RegistrationStatus::Registering => {
-                ui.label("⏳ Registering for lottery...");
-            }
-            RegistrationStatus::Registered(dj_id) => {
-                let dj_id_clone = dj_id.clone();
-                self.render_registered_interface(ui, &dj_id_clone);
-            }
-            RegistrationStatus::Error(error) => {
-                ui.colored_label(egui::Color32::RED, format!("❌ Error: {}", error));
-                ui.add_space(10.0);
-                if ui.button("🔄 Try Again").clicked() {
-                    self.registration_status = RegistrationStatus::NotRegistered;
-                    self.error_message = None;
+        // Two-column layout
+        ui.columns(2, |columns| {
+            // LEFT COLUMN: Registration
+            match &self.registration_status {
+                RegistrationStatus::NotRegistered => {
+                    self.render_registration_form(&mut columns[0]);
+                }
+                RegistrationStatus::Registering => {
+                    columns[0].label("⏳ Registering for lottery...");
+                }
+                RegistrationStatus::Registered(dj_id) => {
+                    let dj_id_clone = dj_id.clone();
+                    self.render_registered_interface(&mut columns[0], &dj_id_clone);
+                }
+                RegistrationStatus::Error(error) => {
+                    columns[0].colored_label(egui::Color32::RED, format!("❌ Error: {}", error));
+                    columns[0].add_space(10.0);
+                    if columns[0].button("🔄 Try Again").clicked() {
+                        self.registration_status = RegistrationStatus::NotRegistered;
+                        self.error_message = None;
+                    }
                 }
             }
-        }
 
-        ui.add_space(20.0);
-        self.render_current_queue(ui);
+            // RIGHT COLUMN: Current Queue
+            self.render_current_queue(&mut columns[1]);
+        });
     }
 
     fn render_event_status(&mut self, ui: &mut egui::Ui) {
